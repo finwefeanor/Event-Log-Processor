@@ -1,9 +1,12 @@
 package com.example.eventlog.model;
 
+/**
+ * This Defines the supported event actions.
+ * The enum keeps valid action names in one place.
+ * isSupported() checks unknown values safely.
+ * JSON values are lowercase, so they are converted to uppercase before comparing with the enum constants.
+ */
 public enum Action {
-
-    //I used enums to centralize the supported action names
-    // and avoid hardcoding action checks everywhere.
 
     LOGIN,
     LOGOUT,

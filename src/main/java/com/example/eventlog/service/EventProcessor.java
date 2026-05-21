@@ -19,17 +19,16 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import com.example.eventlog.validator.ValidationResult;
 
+/**
+ * Coordinates parsing, validation, and statistics calculation.
+ *
+ * Valid events are used to update the statistics. Invalid lines are counted
+ * and skipped, so one bad line does not stop the whole file.
+ *
+ * processLines() is useful for tests, while processFile() reads from an actual file.
+ * Both methods use the same line-processing logic to avoid duplication.
+ */
 public class EventProcessor {
-
-    /**
-     * EventProcessor coordinates the parser and validator,
-     * then updates statistics only for valid events.
-     * Invalid lines are counted and skipped, so processing continues even if one line is bad.
-     *
-     * I used BufferedReader in processFile method for file processing because it reads the file line by line,
-     * instead of loading the entire file into memory.
-     * This satisfies the optional streaming-large-files requirement.
-     */
 
     private final EventParser parser;
     private final EventValidator validator;
@@ -39,209 +38,146 @@ public class EventProcessor {
         this.validator = validator;
     }
 
+    /**
+     * Processes a list of lines already loaded in memory.
+     *
+     * This is mainly useful for unit tests, because test data can be passed directly
+     * without creating a real input file.
+     */
     public Statistics processLines(List<String> lines) {
-        Statistics statistics = new Statistics();
-
-        int validCount = 0;
-        int invalidCount = 0;
-        int purchaseCount = 0;
-
-        Map<UUID, Integer> userCounts = new LinkedHashMap<>();
-        Map<String, Integer> actionCounts = new LinkedHashMap<>();
-        Map<Integer, String> invalidLineReasons = new LinkedHashMap<>();
-
-        BigDecimal totalPurchaseAmount = BigDecimal.ZERO;
-        BigDecimal largestPurchase = BigDecimal.ZERO;
+        ProcessingState state = new ProcessingState();
 
         for (int i = 0; i < lines.size(); i++) {
             int lineNumber = i + 1;
-            String line = lines.get(i);
-
-            Optional<Event> parsedEvent = parser.parseLine(line);
-
-            if (parsedEvent.isEmpty()) {
-                invalidCount++;
-                invalidLineReasons.put(lineNumber, "Line is not valid JSON or contains invalid field format");
-                continue;
-            }
-
-            Event event = parsedEvent.get();
-            ValidationResult validationResult = validator.validate(event);
-
-            if (!validationResult.isValid()) {
-                invalidCount++;
-                invalidLineReasons.put(lineNumber, validationResult.getErrorMessage());
-                continue;
-            }
-
-            validCount++;
-
-            UUID userId = event.getUserId();
-            String action = event.getAction().toLowerCase();
-
-            userCounts.put(userId, userCounts.getOrDefault(userId, 0) + 1);
-            actionCounts.put(action, actionCounts.getOrDefault(action, 0) + 1);
-
-            if ("purchase".equals(action)) {
-                BigDecimal amount = event.getAmount();
-
-                totalPurchaseAmount = totalPurchaseAmount.add(amount);
-                purchaseCount++;
-
-                if (amount.compareTo(largestPurchase) > 0) {
-                    largestPurchase = amount;
-                }
-            }
+            processSingleLine(lines.get(i), lineNumber, state);
         }
 
-        statistics.setTotalValidEvents(validCount);
-        statistics.setTotalInvalidLines(invalidCount);
-        statistics.setEventCountPerUser(userCounts);
-        statistics.setEventCountPerAction(actionCounts);
-        statistics.setInvalidLineReasons(invalidLineReasons);
-        statistics.setTotalPurchaseAmount(totalPurchaseAmount);
-        statistics.setLargestPurchase(largestPurchase);
-
-        if (purchaseCount > 0) {
-            BigDecimal average = totalPurchaseAmount.divide(
-                    BigDecimal.valueOf(purchaseCount),
-                    2,
-                    RoundingMode.HALF_UP
-            );
-            statistics.setAveragePurchaseAmount(average);
-        }
-
-        Optional<Map.Entry<UUID, Integer>> mostActiveUser = userCounts.entrySet()
-                .stream()
-                .max(Map.Entry.comparingByValue());
-
-        mostActiveUser.ifPresent(entry -> statistics.setMostActiveUser(entry.getKey()));
-
-        Map<UUID, Integer> topThreeUsers = userCounts.entrySet()
-                .stream()
-                .sorted(Map.Entry.<UUID, Integer>comparingByValue(Comparator.reverseOrder()))
-                .limit(3)
-                .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        Map.Entry::getValue,
-                        (oldValue, newValue) -> oldValue,
-                        LinkedHashMap::new
-                ));
-
-        statistics.setTopThreeMostActiveUsers(topThreeUsers);
-
-        return statistics;
+        return buildStatistics(state);
     }
 
+    /**
+     * Processes an input file line by line.
+     *
+     * BufferedReader is used so the full file does not need to be loaded into memory.
+     * This makes it more suitable for larger log files.
+     */
     public Statistics processFile(Path inputFilePath) throws IOException {
-        Statistics statistics = new Statistics();
-
-        int validCount = 0;
-        int invalidCount = 0;
-        int purchaseCount = 0;
-
-        Map<UUID, Integer> userCounts = new LinkedHashMap<>();
-        Map<String, Integer> actionCounts = new LinkedHashMap<>();
-        Map<Integer, String> invalidLineReasons = new LinkedHashMap<>();
-
-        BigDecimal totalPurchaseAmount = BigDecimal.ZERO;
-        BigDecimal largestPurchase = BigDecimal.ZERO;
-
-        int lineNumber = 0;
+        ProcessingState state = new ProcessingState();
 
         try (BufferedReader reader = Files.newBufferedReader(inputFilePath)) {
             String line;
+            int lineNumber = 0;
 
             while ((line = reader.readLine()) != null) {
                 lineNumber++;
-
-                Optional<Event> parsedEvent = parser.parseLine(line);
-
-                if (parsedEvent.isEmpty()) {
-                    invalidCount++;
-                    invalidLineReasons.put(lineNumber, "Line is not valid JSON or contains invalid field format");
-                    continue;
-                }
-
-                Event event = parsedEvent.get();
-                ValidationResult validationResult = validator.validate(event);
-
-                if (!validationResult.isValid()) {
-                    invalidCount++;
-                    invalidLineReasons.put(lineNumber, validationResult.getErrorMessage());
-                    continue;
-                }
-
-                validCount++;
-
-                UUID userId = event.getUserId();
-                String action = event.getAction().toLowerCase();
-
-                userCounts.put(userId, userCounts.getOrDefault(userId, 0) + 1);
-                actionCounts.put(action, actionCounts.getOrDefault(action, 0) + 1);
-
-                if ("purchase".equals(action)) {
-                    BigDecimal amount = event.getAmount();
-
-                    totalPurchaseAmount = totalPurchaseAmount.add(amount);
-                    purchaseCount++;
-
-                    if (amount.compareTo(largestPurchase) > 0) {
-                        largestPurchase = amount;
-                    }
-                }
+                processSingleLine(line, lineNumber, state);
             }
         }
 
-        fillStatistics(
-                statistics,
-                validCount,
-                invalidCount,
-                purchaseCount,
-                userCounts,
-                actionCounts,
-                invalidLineReasons,
-                totalPurchaseAmount,
-                largestPurchase
-        );
-
-        return statistics;
+        return buildStatistics(state);
     }
 
-    private void fillStatistics(Statistics statistics,
-                                int validCount,
-                                int invalidCount,
-                                int purchaseCount,
-                                Map<UUID, Integer> userCounts,
-                                Map<String, Integer> actionCounts,
-                                Map<Integer, String> invalidLineReasons,
-                                BigDecimal totalPurchaseAmount,
-                                BigDecimal largestPurchase) {
+    /**
+     * Handles one input line by parsing, validating, and updating the current state.
+     */
+    private void processSingleLine(String line, int lineNumber, ProcessingState state) {
+        Optional<Event> parsedEvent = parser.parseLine(line);
 
-        statistics.setTotalValidEvents(validCount);
-        statistics.setTotalInvalidLines(invalidCount);
-        statistics.setEventCountPerUser(userCounts);
-        statistics.setEventCountPerAction(actionCounts);
-        statistics.setInvalidLineReasons(invalidLineReasons);
-        statistics.setTotalPurchaseAmount(totalPurchaseAmount);
-        statistics.setLargestPurchase(largestPurchase);
+        if (parsedEvent.isEmpty()) {
+            state.invalidCount++;
+            state.invalidLineReasons.put(lineNumber, "Line is not valid JSON or contains invalid field format");
+            return;
+        }
 
-        if (purchaseCount > 0) {
-            BigDecimal average = totalPurchaseAmount.divide(
-                    BigDecimal.valueOf(purchaseCount),
+        Event event = parsedEvent.get();
+        ValidationResult validationResult = validator.validate(event);
+
+        if (!validationResult.isValid()) {
+            state.invalidCount++;
+            state.invalidLineReasons.put(lineNumber, validationResult.getErrorMessage());
+            return;
+        }
+
+        updateStatisticsWithValidEvent(event, state);
+    }
+
+    private void updateStatisticsWithValidEvent(Event event, ProcessingState state) {
+        state.validCount++;
+
+        UUID userId = event.getUserId();
+        String action = event.getAction().toLowerCase();
+
+        state.userCounts.put(userId, state.userCounts.getOrDefault(userId, 0) + 1);
+        state.actionCounts.put(action, state.actionCounts.getOrDefault(action, 0) + 1);
+
+        //Every valid event should update.
+        //Then, only if the event is purchase, we additionally update purchase statistics.
+
+        if ("purchase".equals(action)) {
+            BigDecimal amount = event.getAmount();
+
+            state.totalPurchaseAmount = state.totalPurchaseAmount.add(amount);
+            state.purchaseCount++;
+
+            //If the current purchase amount is bigger than the largest purchase found so far,
+            // replace largestPurchase.
+            if (amount.compareTo(state.largestPurchase) > 0) {
+                state.largestPurchase = amount;
+            }
+        }
+    }
+
+    /**
+     * Builds the final Statistics object from the collected processing state.
+     */
+    private Statistics buildStatistics(ProcessingState state) {
+        Statistics statistics = new Statistics();
+
+        statistics.setTotalValidEvents(state.validCount);
+        statistics.setTotalInvalidLines(state.invalidCount);
+        statistics.setInvalidLineReasons(state.invalidLineReasons);
+
+        statistics.setEventCountPerUser(state.userCounts);
+        statistics.setEventCountPerAction(state.actionCounts);
+
+        statistics.setTotalPurchaseAmount(state.totalPurchaseAmount);
+        statistics.setLargestPurchase(state.largestPurchase);
+
+        if (state.purchaseCount > 0) {
+            BigDecimal average = state.totalPurchaseAmount.divide(
+                    BigDecimal.valueOf(state.purchaseCount),
                     2,
                     RoundingMode.HALF_UP
             );
             statistics.setAveragePurchaseAmount(average);
         }
 
-        Optional<Map.Entry<UUID, Integer>> mostActiveUser = userCounts.entrySet()
+        statistics.setMostActiveUser(findMostActiveUser(state.userCounts));
+        statistics.setTopThreeMostActiveUsers(findTopThreeUsers(state.userCounts));
+
+        return statistics;
+    }
+
+    /**
+     * Finds the user with the highest number of valid events.
+     *
+     * Returns null if there are no valid events.
+     */
+    private UUID findMostActiveUser(Map<UUID, Integer> userCounts) {
+        return userCounts.entrySet()
                 .stream()
-                .max(Map.Entry.comparingByValue());
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
+    }
 
-        mostActiveUser.ifPresent(entry -> statistics.setMostActiveUser(entry.getKey()));
-
-        Map<UUID, Integer> topThreeUsers = userCounts.entrySet()
+    /**
+     * Returns up to three users with the highest valid event counts.
+     *
+     * LinkedHashMap keeps the sorted order when the result is returned.
+     */
+    private Map<UUID, Integer> findTopThreeUsers(Map<UUID, Integer> userCounts) {
+        return userCounts.entrySet()
                 .stream()
                 .sorted(Map.Entry.<UUID, Integer>comparingByValue(Comparator.reverseOrder()))
                 .limit(3)
@@ -251,8 +187,24 @@ public class EventProcessor {
                         (oldValue, newValue) -> oldValue,
                         LinkedHashMap::new
                 ));
-
-        statistics.setTopThreeMostActiveUsers(topThreeUsers);
     }
 
+    /**
+     * Temporary state used while processing lines.
+     *
+     * This keeps the internal counters and maps together instead of passing them
+     * separately between helper methods.
+     */
+    private static class ProcessingState {
+        private int validCount;
+        private int invalidCount;
+        private int purchaseCount;
+
+        private final Map<UUID, Integer> userCounts = new LinkedHashMap<>();
+        private final Map<String, Integer> actionCounts = new LinkedHashMap<>();
+        private final Map<Integer, String> invalidLineReasons = new LinkedHashMap<>();
+
+        private BigDecimal totalPurchaseAmount = BigDecimal.ZERO;
+        private BigDecimal largestPurchase = BigDecimal.ZERO;
+    }
 }

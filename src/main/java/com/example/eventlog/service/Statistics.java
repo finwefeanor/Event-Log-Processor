@@ -5,9 +5,14 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Stores the final statistics produced by EventProcessor.
+ *
+ * This class only holds the calculated result. BigDecimal is used for purchase values,
+ * and LinkedHashMap keeps printed map results in a predictable order.
+ */
+
 public class Statistics {
-
-
 
     private int totalValidEvents;
     private int totalInvalidLines;
@@ -102,5 +107,6 @@ public class Statistics {
     public void setInvalidLineReasons(Map<Integer, String> invalidLineReasons) {
         this.invalidLineReasons = invalidLineReasons;
     }
+
 
 }

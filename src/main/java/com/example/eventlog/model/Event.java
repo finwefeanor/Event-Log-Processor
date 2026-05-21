@@ -4,17 +4,15 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Represents one parsed event from the JSON log file.
+ * The field types match the expected input format: UUID for IDs,
+ * Instant for timestamp, and BigDecimal for purchase amount.
+ *
+ * action is kept as String so invalid action values do not break parsing
+ * before validation can return a clear error.
+ */
 public class Event {
-
-
-    /**
-    This class represents one event line from the JSON file.
-
-     I used UUID for eventId and userId because the PDF says these fields must be UUIDs.
-     I used Instant for timestamp because the PDF uses ISO-8601 timestamps like 2026-05-01T10:00:00Z.
-     I used BigDecimal for amount because money/decimal values should not be handled with double if precision matters.
-     I kept action as String instead of enum so unknown actions can be parsed first and rejected by validation later.
-     */
 
     private Instant timestamp;
     private UUID eventId;
@@ -22,12 +20,16 @@ public class Event {
     private String action;
 
     // Optional fields depending on action
-    private String articleId;   // required for view
-    private String target;      // required for click
-    private BigDecimal amount;  // required for purchase
+    // These are required only for certain actions:
+    // view -> articleId
+    // click -> target
+    // purchase -> amount
+    private String articleId;
+    private String target;
+    private BigDecimal amount;
 
     public Event() {
-        // Needed by Jackson
+        // // Required by Jackson when converting JSON into an Event object.
     }
 
     public Event(Instant timestamp,

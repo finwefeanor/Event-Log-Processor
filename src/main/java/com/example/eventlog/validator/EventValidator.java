@@ -4,70 +4,73 @@ import com.example.eventlog.model.Action;
 import com.example.eventlog.model.Event;
 
 import java.math.BigDecimal;
+/**
+ * Checks whether a parsed Event follows the expected event rules.
+ *
+ * Parsing and validation are kept separate because a line can be valid JSON
+ * but still be invalid for this task. For example, a view event can parse
+ * correctly but still be invalid if articleId is missing.
+ *
+ * The validator returns a ValidationResult so invalid events can include
+ * a clear reason instead of only true or false.
+ */
 
 public class EventValidator {
-    /**
-     *
-     * I separated validation from parsing because valid
-     * JSON can still be invalid according to business rules.
-     *
-     * This checks business rules:
-     * timestamp exists
-     * eventId exists
-     * userId exists
-     * action is supported
-     * view has articleId
-     * click has target
-     * purchase has valid amount
-     */
 
+    /**
+     * Helper method for callers that only need a true or false result.
+     */
     public boolean isValid(Event event) {
         return validate(event).isValid();
     }
 
+    /**
+     * Validates one event and returns the result with an error message if it fails.
+     */
     public ValidationResult validate(Event event) {
         if (event == null) {
-            return ValidationResult.invalid("Event is null or could not be parsed");
+            return new ValidationResult(false,"Event is null or could not be parsed");
         }
 
         if (event.getTimestamp() == null) {
-            return ValidationResult.invalid("timestamp is missing or invalid");
+            return new ValidationResult(false,"timestamp is missing or invalid");
         }
 
         if (event.getEventId() == null) {
-            return ValidationResult.invalid("eventId is missing or invalid UUID");
+            return new ValidationResult(false,"eventId is missing or invalid UUID");
         }
 
         if (event.getUserId() == null) {
-            return ValidationResult.invalid("userId is missing or invalid UUID");
+            return new ValidationResult(false,"userId is missing or invalid UUID");
         }
 
         if (event.getAction() == null || event.getAction().isBlank()) {
-            return ValidationResult.invalid("action is missing");
+            return new ValidationResult(false,"action is missing");
         }
 
         if (!Action.isSupported(event.getAction())) {
-            return ValidationResult.invalid("unknown action: " + event.getAction());
+            return new ValidationResult(false,"unknown action: " + event.getAction());
         }
 
         String action = event.getAction().toLowerCase();
 
+        // After common fields are validated, check action-specific required fields.
         return switch (action) {
-            case "login", "logout" -> ValidationResult.valid();
+            case "login", "logout" -> new ValidationResult(true, null);
 
             case "view" -> isNotBlank(event.getArticleId())
-                    ? ValidationResult.valid()
-                    : ValidationResult.invalid("view event is missing articleId");
+                    ? new ValidationResult(true, null)
+                    : new ValidationResult(false, "view event is missing articleId");
 
             case "click" -> isNotBlank(event.getTarget())
-                    ? ValidationResult.valid()
-                    : ValidationResult.invalid("click event is missing target");
+                    ? new ValidationResult(true, null)
+                    : new ValidationResult(false,"click event is missing target");
 
             case "purchase" -> isValidPurchaseAmount(event.getAmount())
-                    ? ValidationResult.valid()
-                    : ValidationResult.invalid("purchase event contains missing, invalid, or negative amount");
+                    ? new ValidationResult(true, null)
+                    : new ValidationResult(false,"purchase event contains missing, invalid, or negative amount");
 
-            default -> ValidationResult.invalid("unsupported action");
+            default -> new ValidationResult(false,"unsupported action");
         };
     }
 
