@@ -8,6 +8,9 @@ import com.example.eventlog.validator.EventValidator;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * Application entry point.
@@ -82,8 +85,13 @@ public class Main {
     private static void printEventCountPerUser(Statistics statistics) {
         System.out.println();
         System.out.println("Event count per user:");
+
+        //sorted
         statistics.getEventCountPerUser()
-                .forEach((userId, count) -> System.out.println(userId + ": " + count));
+                .entrySet()
+                .stream()
+                .sorted(Map.Entry.<UUID, Integer>comparingByValue(Comparator.reverseOrder()))
+                .forEach(entry -> System.out.println(entry.getKey() + ": " + entry.getValue()));
     }
 
     private static void printPurchaseStatistics(Statistics statistics) {
