@@ -1,6 +1,6 @@
 # Event Log Processor
 
-A small Java console application that reads event logs from a file, validates each event, skips malformed or invalid lines, and prints aggregated statistics.
+A small Java console application that reads event logs from a file, validates each event, skips malformed or invalid lines, and prints the statistics.
 
 ## Tech Stack
 
@@ -11,6 +11,8 @@ A small Java console application that reads event logs from a file, validates ea
 
 ## How to Run
 
+Open a terminal, Command Prompt, PowerShell, or Git Bash from the root folder of the project.
+
 Build the project:
 
 ```bash
@@ -19,14 +21,16 @@ mvn clean package
 
 ## Running Notes
 
-This is a command-line application. It is intended to be run from a terminal with the input file path as an argument.
+Run the application with an input file path:
 
 ```bash
 java -jar target/event-log-processor.jar input/events.txt
 ```
 
+This is a command-line application, so the input file path must be provided as an argument.
 
-The input file should contain one JSON object per line.
+
+The input file, for example input/events.txt, should contain one JSON object per line.
 
 ```text
 {"timestamp":"2026-05-01T10:00:00Z","eventId":"550e8400-e29b-41d4-a716-446655440000","userId":"c1b7d8f0-1c3a-4d95-8d0d-6df3f1d5b001","action":"login"}
@@ -48,7 +52,7 @@ The application prints:
 
 ## Design Decisions
 
-The application is implemented as a console application because the task focuses on file processing, validation, and statistics generation. A REST API or GUI would add extra complexity without being necessary for the core requirements.
+The application is implemented as a console application because the task focuses on file processing, validation, and statistics generation.
 
 
 The code is split into small components:
@@ -69,7 +73,7 @@ Unknown actions are treated as invalid.
 Purchase amounts must be valid decimal numbers and cannot be negative.
 Duplicate eventId handling is not implemented because it is listed as optional bonus work.
 
-##Testing
+## Testing
 
 Run tests with:
 ```bash
